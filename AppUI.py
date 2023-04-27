@@ -2,6 +2,9 @@ import time
 
 from tkinter import *
 from tkinter import filedialog, ttk
+
+from ColumnSelectUI import ColumnSelectUI
+from numpy import array_equal
 from UIEvent import UIEvent
 
 
@@ -16,9 +19,12 @@ class AppUI:
         else:
             self.master.resizable(True, True)
 
+        self.column_ui = ColumnSelectUI(self.master)
+
         # Class variables
         self.input_folder = None
         self.output_folder = None
+        self.columns = None
 
         # UI elements
         self.file_progress_label = None
@@ -103,6 +109,12 @@ class AppUI:
 
                 # Notify owner we are ready to begin processing
                 self.event_handler(UIEvent("begin_processing"))
+
+    def select_columns(self, dialog_title, columns):
+        if not array_equal(columns, self.columns):
+            # show column selection dialog
+            self.columns = self.column_ui.select_columns(dialog_title, columns)
+        return self.columns
 
     # Function to update progress bars
     def update_progress_bars(self, file_percent, file_elapsed_time, file_eta, overall_percent, overall_elapsed_time, overall_eta):

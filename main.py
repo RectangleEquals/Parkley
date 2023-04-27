@@ -17,8 +17,11 @@ class App:
         self.process_thread = None
         self.input_folder = None
         self.output_folder = None
-        # self.columns = ['url', 'fetch_time', 'fetch_status', 'content_languages']
-        self.columns = ['VendorID', 'tpep_pickup_datetime', 'tpep_dropoff_datetime', 'passenger_count']
+        self.columns = None
+        self.row_steps = 100
+        self.con = duckdb.connect(':memory:')
+
+        # Progress variables
         time_now = time.time()
         self.file_start_time = time_now
         self.file_percent = 0
@@ -30,8 +33,6 @@ class App:
         self.overall_percent = 0
         self.overall_elapsed_time = time_now
         self.overall_eta = time_now
-        self.row_steps = 100
-        self.con = duckdb.connect(':memory:')
 
         # Initialize UI events and elements
         callbacks = UIEvent.UIEventCallbacks()
@@ -42,11 +43,11 @@ class App:
     # Function to handle info/warnings/errors dispatched from AppUI
     def handle_ui_event(self, e):
         if e.event_type == "info":
-            messagebox.showerror(e.event_message)
+            messagebox.showerror(e.event_data)
         elif e.event_type == "warning":
-            messagebox.showwarning(e.event_message)
+            messagebox.showwarning(e.event_data)
         elif e.event_type == "error":
-            messagebox.showerror(e.event_message)
+            messagebox.showerror(e.event_data)
             return False
         elif e.event_type == "update_input_folder":
             self.input_folder = self.app_ui.input_folder
@@ -92,6 +93,38 @@ class App:
             if file.endswith(".parquet"):
                 parquet_files.append(os.path.join(self.input_folder, file))
         return parquet_files
+
+    def get_table_columns(self, input_file):
+        table = pq.read_table(input_file)
+        return table.column_names
+
+    # Function to process the parquet files and update progress bar
+    def process_parquet_files(self):
+        parquet_files = self.search_for_parquet_files()
+        self.overall_total_files = len(parquet_files)
+        self.overall_start_time = time.time()
+
+        for i, input_file in enumerate(parquet_files):
+            if self.process_thread:
+                if self.process_thread.is_stopping() or not self.process_thread.is_running():
+                    self.check_thread_error()
+                    break
+            self.overall_file_index = i
+            input_file_name = os.path.basename(input_file)
+            output_file = os.path.join(self.output_folder, os.path.splitext(input_file_name)[0] + ".csv")
+
+            # Allow the user to select which columns to export
+            selected_columns = None
+            while selected_columns is None:
+                selected_columns = self.app_ui.select_columns(input_file_name, self.get_table_columns(input_file))
+                if selected_columns is not None:
+                    self.columns = selected_columns
+
+            self.convert_parquet_file_to_csv(input_file, output_file, self.columns)
+            self.update_progress()
+
+        # The process has finished, so restore the UI to it's original state
+        self.cancel_process()
 
     # Function to read
     def convert_parquet_file_to_csv(self, input_file, output_file, columns):
@@ -174,26 +207,6 @@ class App:
         else:
             messagebox.showinfo("Info", "The process has been cancelled or interrupted")
         return False
-
-    # Function to process the parquet files and update progress bar
-    def process_parquet_files(self):
-        parquet_files = self.search_for_parquet_files()
-        self.overall_total_files = len(parquet_files)
-        self.overall_start_time = time.time()
-
-        for i, file in enumerate(parquet_files):
-            if self.process_thread:
-                if self.process_thread.is_stopping() or not self.process_thread.is_running():
-                    self.check_thread_error()
-                    break
-            self.overall_file_index = i
-            input_file = file
-            output_file = os.path.join(self.output_folder, os.path.splitext(os.path.basename(file))[0] + ".csv")
-            self.convert_parquet_file_to_csv(input_file, output_file, self.columns)
-            self.update_progress()
-
-        # The process has finished, so restore the UI to it's original state
-        self.cancel_process()
 
 
 app = App("Parquet Parley", "500x400")
