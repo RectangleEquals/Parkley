@@ -57,7 +57,7 @@ class App:
                 self.handle_ui_event(UIEvent.UIEvent("error", "A process is already running!"))
                 return False
         elif e.event_type == "begin_processing":
-            self.process_thread = FunctionThread(target=self.process_parquet_files, onerror=self.check_last_exception)
+            self.process_thread = FunctionThread(target=self.process_parquet_files, on_error=self.check_thread_error, on_done=self.check_thread_done)
             self.process_thread.start()
         return True
 
@@ -65,7 +65,8 @@ class App:
     def cancel_process(self):
         if self.is_processing():
             self.process_thread.stop()
-            self.check_last_exception()
+            self.check_thread_error()
+            #if not self.check_thread_done():
         self.app_ui.handle_ui_events(UIEvent.UIEvent("cancel_process"))
         self.update_progress()
 
@@ -120,6 +121,11 @@ class App:
 
             # Iterate over each range of rows
             for i in range(total_iterations):
+                if self.process_thread:
+                    if self.process_thread.is_stopping() or not self.process_thread.is_running():
+                        self.check_thread_error()
+                        break
+
                 if start_row + row_steps > total_rows:
                     row_steps = total_rows - start_row
                 # stop_row = min(start_row + row_steps, total_rows)
@@ -131,6 +137,11 @@ class App:
 
                 # Loop over the range of specified rows
                 for j in range(len(rows)):
+                    if self.process_thread:
+                        if self.process_thread.is_stopping() or not self.process_thread.is_running():
+                            self.check_thread_error()
+                            break
+
                     # Process the data for the current row as desired
                     row_data = rows[j]
                     writer.writerow(row_data)
@@ -149,9 +160,20 @@ class App:
                 if start_row > total_rows:
                     break
 
-    def check_last_exception(self):
-        if self.process_thread.has_exception():
-            messagebox.showerror("Error", self.process_thread.get_last_exception())
+    def check_thread_error(self, error=None):
+        if error or self.process_thread.has_exception():
+            if error is not None:
+                messagebox.showerror("Error", f"Exception in processing thread: {error}")
+            else:
+                messagebox.showerror("Error", f"Exception in processing thread: {self.process_thread.get_last_exception()}")
+
+    def check_thread_done(self):
+        if self.process_thread.is_done():
+            messagebox.showinfo("Info", "The process has completed successfully")
+            return True
+        else:
+            messagebox.showinfo("Info", "The process has been cancelled or interrupted")
+        return False
 
     # Function to process the parquet files and update progress bar
     def process_parquet_files(self):
@@ -160,9 +182,10 @@ class App:
         self.overall_start_time = time.time()
 
         for i, file in enumerate(parquet_files):
-            if self.process_thread and not self.process_thread.is_running():
-                self.check_last_exception()
-                break
+            if self.process_thread:
+                if self.process_thread.is_stopping() or not self.process_thread.is_running():
+                    self.check_thread_error()
+                    break
             self.overall_file_index = i
             input_file = file
             output_file = os.path.join(self.output_folder, os.path.splitext(os.path.basename(file))[0] + ".csv")

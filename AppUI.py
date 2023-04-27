@@ -52,10 +52,13 @@ class AppUI:
 
         self.file_progress_label = ttk.Label(self.master, text="Current File: 0% | 00:00:00 | 00:00:00", font=("Arial Bold", 8))
         self.file_progress_bar = ttk.Progressbar(self.master, orient="horizontal", length=400, mode="determinate")
+        self.file_progress_label.pack(pady=5)
         self.file_progress_bar.pack(pady=5)
+
         self.overall_progress_label = ttk.Label(self.master, text="Overall: 0% | 00:00:00 | 00:00:00", font=("Arial Bold", 8))
         self.overall_progress_bar = ttk.Progressbar(self.master, orient="horizontal", length=400, mode="determinate")
         self.overall_progress_bar.pack(pady=5)
+        self.overall_progress_label.pack(pady=5)
 
         self.master.mainloop()
 
@@ -79,9 +82,9 @@ class AppUI:
             if event.event_type == "cancel_process":
                 self.input_folder_button.config(state="normal")
                 self.output_folder_button.config(state="normal")
-                self.file_progress_label.pack_forget()
-                self.overall_progress_label.pack_forget()
-                self.process_button.config(text="Process", bg="green", command=lambda: self.handle_ui_events(self.process_button))
+                self.process_button.config(text="Process", bg="green", command=lambda: self.handle_ui_events(UIEvent(self.process_button)))
+                zero_time = time.gmtime(0)
+                self.update_progress_bars(0, zero_time, zero_time, 0, zero_time, zero_time)
             else:
                 if not self.input_folder:
                     if not self.event_handler(UIEvent("warning", "Please select input folder!")):
@@ -93,8 +96,6 @@ class AppUI:
                     return
 
                 # Update the UI
-                self.file_progress_label.pack(pady=5)
-                self.overall_progress_label.pack(pady=5)
                 self.process_button.config(text="Cancel", bg="red", command=self.event_callbacks.on_cancel_process)
                 self.process_button.config(state=NORMAL)
                 self.input_folder_button.config(state="disabled")
@@ -109,12 +110,20 @@ class AppUI:
         self.file_progress_bar['value'] = file_percent
         file_elapsed_time_str = time.strftime("%H:%M:%S", file_elapsed_time)
         file_eta_str = time.strftime("%H:%M:%S", file_eta)
-        if self.file_progress_label:
-            self.file_progress_label.config(text=f"Current File: {file_percent}% | Elapsed: {file_elapsed_time_str} | Remaining: {file_eta_str}")
+
+        file_percent_str = "N/A"
+        if file_percent != 0:
+            file_percent_str = format(file_percent, '.2f')
+        self.file_progress_label.config(text=f"Current File: {file_percent_str}% | Elapsed: {file_elapsed_time_str} | Remaining: {file_eta_str}")
 
         # Overall progress
         self.overall_progress_bar['value'] = overall_percent
         overall_elapsed_time_str = time.strftime("%H:%M:%S", overall_elapsed_time)
         overall_eta_str = time.strftime("%H:%M:%S", overall_eta)
-        if self.overall_progress_label:
-            self.overall_progress_label.config(text=f"Overall: {overall_percent}% | Elapsed: {overall_elapsed_time_str} | Remaining: {overall_eta_str}")
+        if overall_eta_str == "00:00:00":
+            overall_eta_str = file_eta_str
+
+        overall_percent_str = "N/A"
+        if overall_percent != 0:
+            overall_percent_str = format(overall_percent, '.2f')
+        self.overall_progress_label.config(text=f"Overall: {overall_percent_str}% | Elapsed: {overall_elapsed_time_str} | Remaining: {overall_eta_str}")
