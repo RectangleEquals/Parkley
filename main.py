@@ -24,7 +24,7 @@ class App:
         self.file_percent = 0
         self.file_elapsed_time = time_now
         self.file_eta = time_now
-        self.overall_total_files = 1
+        self.overall_total_files = 0
         self.overall_file_index = 0
         self.overall_start_time = time_now
         self.overall_percent = 0
@@ -63,24 +63,25 @@ class App:
 
     # Function to cancel the current process
     def cancel_process(self):
-        if self.process_thread:
-            if self.process_thread.is_alive():
-                self.process_thread.stop()
-            else:
-                self.check_last_exception()
-
-        self.app_ui.input_folder_button.config(state="normal")
-        self.app_ui.output_folder_button.config(state="normal")
-        self.app_ui.file_progress_bar.pack_forget()
-        self.app_ui.overall_progress_bar.pack_forget()
-        self.app_ui.process_button.config(text="Process", bg="green", command=lambda: self.app_ui.handle_ui_events(self.app_ui.process_button))
+        if self.is_processing():
+            self.process_thread.stop()
+            self.check_last_exception()
+        self.app_ui.handle_ui_events(UIEvent.UIEvent("cancel_process"))
         self.update_progress()
+
+    def is_processing(self):
+        if self.process_thread:
+            if self.process_thread.is_running():
+                return True
+        return False
 
     # Function to update progress
     def update_progress(self):
-        self.overall_percent = math.ceil(((self.overall_file_index + 1) / self.overall_total_files) * 100)
-        self.overall_elapsed_time = time.time() - self.overall_start_time
-        self.overall_eta = self.overall_elapsed_time * ((self.overall_total_files - (self.overall_file_index + 1)) / (self.overall_file_index + 1))
+        self.overall_percent = math.ceil(((self.overall_file_index + 1) / (self.overall_total_files + 1)) * 100)
+        overall_elapsed_time = time.time() - self.overall_start_time
+        self.overall_elapsed_time = time.gmtime(overall_elapsed_time)
+        overall_eta = overall_elapsed_time * ((self.overall_total_files - (self.overall_file_index + 1)) / (self.overall_file_index + 1))
+        self.overall_eta = time.gmtime(overall_eta)
         self.app_ui.update_progress_bars(self.file_percent, self.file_elapsed_time, self.file_eta, self.overall_percent, self.overall_elapsed_time, self.overall_eta)
 
     # Function to search the input folder for parquet files
@@ -115,7 +116,7 @@ class App:
             writer.writerow(columns)
 
             # Start time
-            start_time = time.time()
+            self.file_start_time = time.time()
 
             # Iterate over each range of rows
             for i in range(total_iterations):
@@ -137,7 +138,7 @@ class App:
 
                 # Calculate progress and print progress information
                 self.file_percent = (rows_processed / total_rows) * 100
-                elapsed_time = time.time() - start_time
+                elapsed_time = time.time() - self.file_start_time
                 self.file_elapsed_time = time.gmtime(elapsed_time)
                 eta = (elapsed_time / (i + 1)) * (total_iterations - i - 1)
                 self.file_eta = time.gmtime(eta)
@@ -149,7 +150,7 @@ class App:
                     break
 
     def check_last_exception(self):
-        if self.process_thread.has_exception:
+        if self.process_thread.has_exception():
             messagebox.showerror("Error", self.process_thread.get_last_exception())
 
     # Function to process the parquet files and update progress bar
